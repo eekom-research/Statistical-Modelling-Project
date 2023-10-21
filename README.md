@@ -1,7 +1,17 @@
-# Final-Project-Statistical-Modelling-with-Python
+# Statistical Modelling with Python
 
 ## Project/Goals
-(fill in your description and goals here)
+The overaching goals of the project are to practice data analysis
+and statistical modelling using Python. Detailed learning 
+objectives include, but not limited, to:
+
+* Accessing data using APIs
+* Cleaning and transforming data using Python
+* Loading data into a database using Python
+* Performing EDA, including using both statistics and visualizations
+* Identifying trends and patterns in data using statistical models
+* Interpreting the results of the statistical models
+
 
 ## Process
 ### (your step 1)
