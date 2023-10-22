@@ -1,1 +1,5 @@
 /notebooks/config.py
+/mardown_template.md
+/notebooks/.ipynb_checkpoints/
+/.idea
+/notebooks/__pycache__/

@@ -1,9 +1,9 @@
 # Statistical Modelling with Python
 
-## Project/Goals
-The overaching goals of the project are to practice data analysis
+## Project Goals
+The overarching goals of the project are to practice data analysis
 and statistical modelling using Python. Detailed learning 
-objectives include, but not limited, to:
+objectives include, but are not limited, to:
 
 * Accessing data using APIs
 * Cleaning and transforming data using Python
