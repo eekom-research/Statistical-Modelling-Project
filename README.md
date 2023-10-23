@@ -140,75 +140,185 @@ Hence, three tables will be created.
 
 ![Database ERD](https://github.com/eekom-research/Statistical-Modelling-Project/blob/main/images/bike_data_ERD.png)
 
-3. bike_station_info --> |'station_id'|'station_name'|'latitude'|'longitude'|'free_bikes'|
-4. bike_station_poi_info --> |'station_id'|'poi_id'|'distance_from_station'|
-5. poi_info --> |'poi_id'|'poi_name'|'poi_source'|'poi_rating'|'poi_price_level'|'poi_total_reviews'|
-                |'poi_formatted_address'|'poi_primary_category'|'poi_sub_category'|
+Declarative Object Relational Mapping (ORM) techniques will be used to model the tables in Python,
+which will then
+be pushed to an SQLite file. This is important especially if there is an intention to continue 
+further developments  of the model in Python. Advantages include having the same consistent 
+model design accessible from both within your app and the external database and have a smoother
+integration with the database, which can potentially quicken development time after the initial
+design stage. Hence, I believe the syntax overhead is fully justified. The following code snippets show
+the design with `sqlalchemy` framework in Python.
 
-I I am working on a statistical modeling project to get my first real practice 
-with working with data and building simple statistical models 
-like linear regression and logistic regression.
+```python
+# imports necessary to create a declarative entity model using sqlalchemy 2.0
+import sqlalchemy as sqla
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import MappedAsDataclass
+from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import mapped_column
+from sqlalchemy import ForeignKey
+from typing import Optional
+```
+The engine creation and declarative mapping table design syntax are shown as follows.
 
-I have firstly collected data from city bikes api, 
-collecting data about bike stations in berlin, 
-the number of bikes they have available, 
-and their latitude an longitude. 
-Using the location data(ll), 
-I have queried two  location services 
- Foursquare and Yelp to get data about 
- points of interests in three categories (restaurant,bars, and fashion retail)
- that are within 1000m from each bike station to enrich the dataset.  
- In other to maintain uniformity in attributes, 
- I have ensured that all fields are consistent between the two sources.
+```python
+# create and connect to a local SQLite database
+engine = sqla.create_engine("sqlite:///../data/bike_data.db")
+# create the base class for table models
+class Base(DeclarativeBase, MappedAsDataclass):
+    pass
+# build bike_station_info table model
+class BikeStationInfo(Base):
+    __tablename__ = 'bike_station_info'
+    station_id: Mapped[str] = mapped_column(primary_key=True)
+    station_name: Mapped[Optional[str]]
+    free_bikes: Mapped[Optional[int]]
+    latitude: Mapped[float]
+    longitude: Mapped[float]
+# build bike_station_poi_info table model
+class BikeStationPoiInfo(Base):
+    __tablename__ = 'bike_station_poi_info'
+    station_id: Mapped[str] = mapped_column(ForeignKey('bike_station_info.station_id'),primary_key=True)
+    poi_id: Mapped[str] = mapped_column(ForeignKey('poi_info.poi_id'),primary_key = True)
+    distance_from_station: Mapped[Optional[float]]
+# build poi_info table model
+class PoiInfo(Base):
+    __tablename__ = 'poi_info'
+    poi_id: Mapped[str] = mapped_column(primary_key=True)
+    station_id: Mapped[str] = mapped_column(ForeignKey('bike_station_info.station_id'))
+    poi_name: Mapped[Optional[str]]
+    poi_source: Mapped[Optional[str]]
+    poi_rating: Mapped[Optional[float]]
+    poi_price_level: Mapped[Optional[float]]
+    poi_total_reviews: Mapped[Optional[float]]
+    poi_formatted_address: Mapped[Optional[str]]
+    poi_primary_category: Mapped[Optional[str]]
+    poi_sub_category: Mapped[Optional[str]]
+```
+The necessary insert statements are then built using the following syntax
 
-The data about the POIs are then joined to the city bike data on the unique id of the bike stations. 
-Since the goal is to build a simple stats model for the data, 
-I have removed some identifying columns, which while useful in other contexts, 
-may not neccesarily add much to the problem at hand. 
-I have removed information such as the bike stations id, name,
- poi_id, poi_name and poi_formated_address.
+```python
+insert_stmt_bike_station_info = sqla.insert(BikeStationInfo)
+```
+The built up insert statement 
+```sql
+INSERT INTO bike_station_info (station_id, station_name, free_bikes, latitude, longitude) VALUES (:station_id, :station_name, :free_bikes, :latitude, :longitude)
+```
+is very convenient as it sets up placeholders to enable batch insertion into the database using a list
+of dictionaries.
 
-I am now left with the following columns: 
-the number of free_bikes in each bike station,
- the latitude and longitude of the bike station, 
- the distance of each POI from the bike station, 
- the source of the POI information, the POI rating, 
- price level, total reviews, primary and sub categories.  
- For these remaining categories, I have done some preprocessing.
- I have dropped rows with an overall poi rating, 
- as I feel the poi rating will most likely be the 
- dependent variable for my modeling purpose. 
- Hence this is critical. For missing values on price level (which depicts affordability),
- I have filled those with the category median values because the price level data seemed skewed, 
- making median appropriate. The price level missing values are 
- 12 percent of the total data but a significant proportion of 
- some categories such as bars and fashion retail. 
- This is because the initial data contains a 
- disporportionate amount of POIs in the restaurant business. 
- Finally, information like category and data source seems 
- to be relevant to the missing price level information,
- therefore, I have filled while taking into cognizance group level median values.
+The other insert statements are then defined similarly. Also, the data to be inserted has to be formatted
+from the csv files obtained in the previous sections. Finally, table creation and data insertion are
+performed using the following syntax
+```python
+# table creation and data insertion
+with engine.begin() as conn:
+    Base.metadata.create_all(conn)
+    conn.execute(insert_stmt_bike_station_info,bike_station_info_values)
+    conn.execute(insert_stmt_poi_info,poi_info_values)
+    conn.execute(insert_stmt_bike_station_poi_info,bike_station_poi_info_values)
+```
+We can then join the datasets, read the joined data from the database, and use the output for 
+onward processing in the next steps. 
+```python
+# we can execute SQL queries on the newly created database and read data from it
+sql_query = '''select *
+from (bike_station_info as bi
+join poi_info as pi on bi.station_id = pi.station_id) as cte
+join bike_station_poi_info as bpi on cte.station_id = bpi.station_id and cte.poi_id = bpi.poi_id; '''
 
-NOw I want to start some exploratory data analysis 
-on this processed data using seaborn.
- The aim is to find some initial patterns 
- or relationship in the current dataframe.
- I want you to help with some structured way
- or checklist for proceeding with this EDA. 
- The essence is not to be painstakingly thorough,
- as this is only a weekend learning project. 
- But I would want the steps/checklist/categories of 
- EDA to be well structured and representative considering the end goal. 
- Basically, I want some process that I would be able to remember 
- and follow through when I continue learning more about the process.
-### (your step 1)
-### (your step 2)
+stmt = sqla.text(sql_query)
+with engine.connect() as conn:
+    result = conn.execute(stmt).all()
+```
+### Exploratory Data Analysis (EDA)
+After joining the data about the POIs to the City Bike data on the unique id of the bike stations, we then
+proceed to do exploratory data analysis. First, the identifying columns such as the station id, 
+poi id, and poi name were removed from the data. While identifying columns are important in other
+contexts, they are not needed for the remainder of this project.
+
+First, since the rating for each POI is going to be critical for further assessments, we want
+to focus our exploration on those POIs that have enough data such that the location
+services were able to generate a rating for them. Consequently, we will drop those POIs
+without ratings. We then perform exploratory analysis on how to handle null values in the `poi_price_level` column, which
+captures the relative degree of affordability of the POI, with 1 being cheap and 4 very expensive. 
+From the analyses, the following conclusions were made:
+
+* The price level data is right-skewed and using the median as the measure of central tendency
+will be appropriate
+* Although the missing values for the price level are relatively small (~12% of the total),
+dropping them will result in loss of a significant amount of data from the Bar and Fashion Retail
+categories, since most data is dominated from the Restaurant category. Hence, the decision
+to replace missing values with representative values has been made.
+* It can be inferred that the price level values are related by group, such as the categories and
+the source of data. Hence, representative values will be computed based on this grouping.
+* Specifically, the missing price level in each row will be determined by the median 
+of the category and from the source it was obtained.
+
+After handling the missing values for the affordability measure, the final column with missing values, `poi_total_reviews`
+was then handled by dropping the missing values as they formed an insignificant proportion of the dataset.
+Univariate, multivariate and pattern analysis were performed on the dataset. The conclusions from this
+phase are summarized below.
+
+* Despite limiting POI search to within 1000m of the bike station, the distance attribute returned shows 
+some POIs exceeding the cutoff.
+* The POIs are significantly restaurants. It might not be meaningful, for example, to get more granularity into the fashion retail category, due to limited data.
+* From the box plots, I can glean that, at a high level, the data might not be representative as many datasets are skewed towards some categories or levels.
+* There are some genuine outliers like for poi_total_reviews and number of free_bikes. These are handled in the next section
+* There is no discernible linear (or otherwise) relationship between variables.
+* No significant variation in poi rating noted between the datasets obtained from the two location services. 
+* The average ratings for all primary categories are similar
+* At first glance, more expensive POIs seem to have higher average ratings. However, due to the limited data
+from that grouping, there is more margin of error in drawing that conclusion.
+
+The important takeaway from this section is that the variables in the dataset do not show any discernible
+inherent linear relationship.
+
+### Model Building and Results
+#### Linear Regression
+The initial observation from the EDA process is confirmed in this section as the linear model is shown
+not to be a good fit to model the variable relationships in the dataset. Despite taking the following 
+corrective measures to improve the model performance:
+* normalizing the numeric values to address conditioning errors and other numerical issues
+* removing the significant outliers,
+* pruning the independent variables to only those with statistically significant coefficients,
+
+the predictive power of the model remained poor. This strongly suggests that either linear regression is a poor model 
+for the underlying relationship or the collected data is not representative enough to fully embed the relationships.
+The following tests were further performed to confirm that the assumptions for using a linear regression
+model were indeed not met.
+
+* The residuals of the model violate the normality assumptions of the OLS regression, as captured by the
+histogram plot and the Shapiro-Wilk's test for normality.
+* From the plot of the residuals vs fitted values, the variance of the residuals do not seem randomly 
+scattered around the horizontal line at zero, showing a clear violation of homoscedasticity.
+
+#### Multinomial Classification
+Additional effort was made to predict the ratings using multinomial regression classification.
+This is justifiable as the ratings can be converted to fall in discrete buckets with specified units of increments from the min to max.
+However, while the LLR p-value seems to suggest that this classification model is statistically better than the null predictor, 
+the model performance as validated from the prediction table show that the model is a poor predictor. 
+This strongly suggests that the collected data is not representative enough to embed any discernible relationship between attributes.
+
+
 
 ## Results
-(fill in what you found about the comparative quality of API coverage in your chosen area and the results of your model.)
+The model results are discussed in the previous section. The comparative quality of API coverage
+in my chosen categories will be discussed here. Qualitatively, both Foursquare and Yelp provide comprehensive coverage of POIs in Berlin, my city of choice.
+They both provide rich details, including ratings, reviews and classification based on price level. In addition,
+both sources include even more details which were not captured due to the rate limits and the
+need for uniformity in the selected attributes, such as popularity factor for
+Foursquare and whether the POI is open overnight for Yelp.
 
+Quantitatively though, Yelp provides almost 100 percent more coverage as indicated by the total number of POIs
+returned in the industries of interest : bars, restuarant, and fashion retail. Yelp returned
+a total of 5637 POIs compared to the 2945 for Foursquare.
 ## Challenges 
-(discuss challenges you faced in the project)
+The main challenges for this project were the short timeframe and the API rate limits imposed by
+the location service providers for the free tier users. As such, only limited datasets were collected.
+From the analyses in the previous sections, this was found to have significant impact on the modeling,
+as the collected data is not representative enough to embed any discernible relationship between attributes.
+
 
 ## Future Goals
 1. The limited time and API limits on the free tier of the location services (Foursquare and Yelp)
@@ -228,6 +338,3 @@ of the datasets.
 can be encoded into more useful forms like postal/zip codes. With such information,
 insights about location clusters could enrich the datasets. More time
 would allow for such encoding and analysis.
-
-
-(what would you do if you had more time?)
